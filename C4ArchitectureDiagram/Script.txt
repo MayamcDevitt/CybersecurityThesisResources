@@ -1,0 +1,188 @@
+workspace "Bookshop System" "This is an example Bookshop system developed to be Threat Modelled by Maya McDevitt as a part of a Thesis research project." {
+    !identifiers hierarchical
+
+    model {
+        c = person "Customer" "Borrows books and subscribes to the system"{
+            tags "External"
+        }
+        a = person "Admin" "Manages users, books and transactions"{
+            tags "External"
+        }
+        
+        fwapi = softwareSystem "Fire Wall, API Gateway" "Provides a layer of protection to system. See notes in doucment supplied" {
+        tags "Infrastructure, Internal"
+        }
+        
+
+        bx = softwareSystem "Browser" "Renders CDN Artifacts" {
+        tags "External"
+        } 
+
+        bs = softwareSystem "Bookshop System" "Provides book access (monthly limit) and subscription services" {
+            tags "Internal"
+            AdminSx = container "Admin Service" "Allows Admin CRUD Operations"{
+                userAccount = component "Query User Account" "Allows Admins see data about a users account to assist in trouble shooting issues"
+                userBooks = component "View All Users Books" "Allows Admins to see which books a User has borrowed"
+                retrunBook = component "Return Book for User" "Allows Admins retrun a book on behalf on another user"
+                resetPassword = component "Reset Users Password" "Allows an Admin to rest users password to a temporary password "
+            }
+            
+            BookSX = container "Book Service" "Allows book related CRUD service"{
+                books = component "View Available Books" "Allows user to see all books available to borrow"
+                allbooks = component "view All Books" "View all books available and currently on loan"
+                mybooks = component "View All my Books" "Allows Users to see which books they have borrowed"
+                take = component "Borrow Book" "Allows users to borrow a book"
+                return = component "Return Book" "Allows users to return a book they have borrowed"
+            }
+            UserSx = container "User Service" "Allows users to subscribe to the service"{
+                sub = component "Subscribe" "Allows user to subscribe to the book borrowing system"
+                unsub = component "Un-Subscribe" "Allows user to un-subscribe to the book borrowing system"
+                createUser = component "Create User" "Allows first time users to create accounts"
+                updateUser = component "Update User account" "Allow a user to change their username/password"
+                deleteUser = component "Delete User" "Deletes users account"
+
+            }
+
+        }
+
+
+        ps = softwareSystem "Payment Service" "External Payment service" {
+            tags "External, stripe"
+        }
+        udb = softwareSystem "User Database" "Stores user sign-in information (passwords hashed with Argon2)" {
+            tags "Database, Encrypted (AES), Internal"
+        }
+               
+        bdb = softwareSystem "Book Database" "Stores book data (MySQL, AES, TDE)" {
+            tags "Database, Internal"
+        }
+
+        // Relationships...
+        # Level one and two
+        a -> bx "R2"
+        c -> bx "R1"
+        bx -> fwapi "R4 - Admin Requests"
+        bx -> fwapi "R5 - Book Requests"
+        bx -> fwapi "R3 - User Requests"
+        fwapi -> bs "R7 - Admin Requests"
+        fwapi -> bs "R8 - Book Requests"
+        fwapi -> bs "R6 - User Requests"
+        fwapi -> bs.AdminSx "R7 - Admin Requests"
+        fwapi -> bs.BookSx "R8 - Book Requests"
+        fwapi -> bs.UserSx "R6 - User API Requests"
+        bs -> ps 
+        bs -> udb
+        bs -> bdb
+        
+        # Admin Service Relationships
+        bs.AdminSx -> udb "R10"
+        bs.AdminSx -> bdb "R11"
+        
+        # Books Service Relationships
+        bs.BookSx -> udb "R12"
+        bs.BookSx -> bdb "R13"
+        
+        # User Services Relationships
+        bs.UserSx -> ps "R14"
+        bs.UserSx -> udb "R15"
+
+
+        
+        
+        # Level Three Books
+        fwapi ->  bs.BookSx.books "R8.2 - get All Books available currently"
+        fwapi ->  bs.BookSx.allbooks "R10.1 - get All Books on the system"
+        fwapi ->  bs.BookSx.mybooks "R10.5 - get All Books user currently has borrowed"
+        fwapi ->  bs.BookSx.take "R10.3 - Borrow a book and make it unavailable for others"
+        fwapi ->  bs.BookSx.return "R10.4 - Return a book and make it available for others"
+        bs.BookSx.allbooks -> bdb "R13.1 - request all available books from DB"
+        bs.BookSx.books -> bdb "R13.2 - request all books from DB"
+        bs.BookSx.mybooks -> udb "R12.3 - request all books user has borrowed"
+        bs.BookSx.take -> udb "R13.1 - Make book unavailbe in book DB"
+        bs.BookSx.take -> bdb "R12.3 - Set book to borrowed in the user DB"
+        bs.BookSx.return -> udb "R13.2 - Set book to returned in the user DB"
+        bs.BookSx.return -> bdb "R12.4 - Make book availbe in book DB"
+        
+        # Level Three User
+        fwapi -> bs.UserSx.sub "R6.1 - Subscribe User"
+        fwapi -> bs.UserSx.unsub "R6.2 - unsubscribe User"
+        fwapi -> bs.UserSx.createUser "R6.3 - Create User account"
+        fwapi -> bs.UserSx.deleteUser "R6.5 - Delete User account"
+        fwapi -> bs.UserSx.updateUser "R6.4 - Create User account"
+        bs.UserSx.sub -> ps "R14.2 - Request subscription"
+        bs.UserSx.sub -> udb "R15.2 - Mark User Subscribed"
+        bs.UserSx.unsub -> ps "R14.1 - Cancel subscription"
+        bs.UserSx.unsub -> udb "R15.1 - Mark User Un-subscribed"
+        bs.UserSx.createUser -> udb "R15.3 - Create new user in DB"
+        bs.UserSx.deleteUser -> udb "R15.4 - Make user inactive in DB"
+        bs.UserSx.updateUser -> udb "R15.3 - change username/password for user in DB"
+
+
+        # Level Three Admin
+        fwapi -> bs.adminSx.userAccount "R7.2 - Request Account Information using users ID" 
+        fwapi -> bs.adminSx.userBooks "R7.3 - Get Books borrowed by user using user ID" 
+        fwapi -> bs.adminSx.resetPassword "R7.1 - Reset password to a password set by the admin"
+        fwapi -> bs.adminSx.retrunBook "R7.4 - Returns book for user with user ID and book ID"
+        bs.AdminSx.userAccount -> udb "R10.2 - get Request for user account details"
+        bs.AdminSx.userBooks -> udb "R10.3 - get Request for user account Books"
+        bs.AdminSx.resetPassword -> udb "R10.1 - put Request for user temp password"
+        bs.AdminSx.retrunBook -> udb "R10.4 - put Request for updating users books borrowed"
+        bs.AdminSx.retrunBook -> bdb "R11.1 - put Request for updating number of books available"
+
+
+    }
+
+    // Views and Styles...
+    views {
+        systemContext bs "LevelOne" {
+            include a c bx *
+            autolayout tb
+        }
+
+        container bs "LevelTwo" {
+            include * a c bx
+            autolayout tb
+        }
+
+        component bs.BookSx "LevelThree-BookService" {
+            include * udb bdb fwapi c bx
+            autolayout tb
+        }
+        
+        component bs.UserSx "LevelThree-UserService" {
+            include * ps fwapi bx c udb 
+            autolayout tb
+        }
+                
+        component bs.AdminSx "LevelThree-AdminService" {
+            include * fwapi bx a
+            autolayout tb
+        }
+
+        styles {
+            element "Element" {
+                color white
+            }
+            element "Person" {
+                background #116611
+                shape person
+            }
+            element "Internal" {
+                background #2D882D
+            }
+            element "Container" {
+                background #55aa55
+            }
+            element "Component" {
+                background #55aa55
+            }
+            element "Database" {
+                shape cylinder
+                background #2D882D
+            }
+            element "External" {
+                background #6495ED
+            }
+        }
+    }
+}
